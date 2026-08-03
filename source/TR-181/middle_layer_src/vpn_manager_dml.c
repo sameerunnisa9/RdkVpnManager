@@ -27,6 +27,8 @@
 
 extern PBACKEND_MANAGER_OBJECT           g_pBEManager;
 
+#define BUF_SIZE                          16
+
 /**********************************************************************
     function: WireGuard_GetParamBoolValue
     description:
@@ -142,6 +144,12 @@ WireGuard_GetParamStringValue
             return 0;
         }
 
+        if (AnscEqualString(ParamName, "LocalIPv6", TRUE))
+        {
+            snprintf(pValue, *pUlSize, "%s", pMyObject->LocalIPv6);
+            return 0;
+        }
+
         if (AnscEqualString(ParamName, "PublicKey", TRUE))
         {
             WireGuard_GetPublicKey(pMyObject->PublicKey); 
@@ -186,11 +194,19 @@ WireGuard_SetParamStringValue
         if (AnscEqualString(ParamName, "LocalIP", TRUE))
         {
             snprintf(pMyObject->LocalIP, sizeof(pMyObject->LocalIP), "%s", pString);
-            syscfg_set(NULL, "wireguard_localip", pString);
+            syscfg_set(NULL, "wireguard_local_ipv4", pString);
             syscfg_commit();
             return TRUE;
         }
-       
+
+        if (AnscEqualString(ParamName, "LocalIPv6", TRUE))
+        {
+            snprintf(pMyObject->LocalIPv6, sizeof(pMyObject->LocalIPv6), "%s", pString);
+            syscfg_set(NULL, "wireguard_local_ipv6", pString);
+            syscfg_commit();
+            return TRUE;
+        }      
+
         if (AnscEqualString(ParamName, "Subnet", TRUE))
         {
             snprintf(pMyObject->Subnet, sizeof(pMyObject->Subnet), "%s", pString);
@@ -206,7 +222,7 @@ WireGuard_SetParamStringValue
 /**********************************************************************
     function: WireGuard_GetParamUlongValue
     description:
-        This function is called to retrieve Boolean parameter value;
+        This function is called to retrieve ulong parameter value;
 
     argument:   ANSC_HANDLE                 hInsContext,
                 The instance handle;
@@ -214,8 +230,8 @@ WireGuard_SetParamStringValue
                 char*                       ParamName,
                 The parameter name;
 
-                BOOL*                       pBool
-                The buffer of returned boolean value;
+                ULONG*                       pUlong
+                The buffer of returned ulong value;
 
     return:     TRUE if succeeded.
 **********************************************************************/
@@ -227,11 +243,68 @@ WireGuard_GetParamUlongValue
         ULONG*                      pUlong
     )
 {
-    if (AnscEqualString(ParamName, "Status", TRUE))
+    PDML_VPN_IF_CFG pMyObject = (PDML_VPN_IF_CFG) g_pBEManager->pVpnConfig;
+
+    if (NULL != pMyObject)
     {
-        if (CosaDml_WireGuardGetStatus((DML_VPN_IF_CFG_STATUS *)pUlong) != ANSC_STATUS_SUCCESS)
-            return FALSE;
-	return TRUE;
+	    if (AnscEqualString(ParamName, "Status", TRUE))
+	    {
+		    if (CosaDml_WireGuardGetStatus((DML_VPN_IF_CFG_STATUS *)pUlong) != ANSC_STATUS_SUCCESS)
+		    {
+			    return FALSE;
+		    }
+		    return TRUE;
+	    }
+	    
+	    if (AnscEqualString(ParamName, "WireguardPort", TRUE))
+	    {
+		    *pUlong = pMyObject->WireguardPort;
+		    return TRUE;
+	    }
+
+    }
+
+    return FALSE;
+}
+
+/**********************************************************************
+    function: WireGuard_SetParamUlongValue
+    description:
+        This function is called to set ulong  parameter value;
+
+    argument:   ANSC_HANDLE                 hInsContext,
+                The instance handle;
+
+                char*                       ParamName,
+                The parameter name;
+
+                ULONG                       pValue
+                The updated  ulong value;
+
+    return:     TRUE if succeeded.
+**********************************************************************/
+BOOL
+WireGuard_SetParamUlongValue
+    (
+        ANSC_HANDLE           hInsContext,
+        char*                 ParamName,
+        ULONG                 uValue
+    )
+{
+    PDML_VPN_IF_CFG pMyObject = (PDML_VPN_IF_CFG) g_pBEManager->pVpnConfig;
+    
+    char buf[BUF_SIZE] = {0};
+
+    if (NULL != pMyObject)
+    {
+        if (AnscEqualString(ParamName, "WireguardPort", TRUE))
+        {
+            pMyObject->WireguardPort = uValue;
+	    sprintf(buf, "%d", uValue);
+	    syscfg_set(NULL, "Wireguard_Port", buf);
+            syscfg_commit();
+            return TRUE;
+        }
     }
 
     return FALSE;
@@ -430,7 +503,13 @@ WireGuardTunnel_GetParamStringValue
     {
         ULONG ins = pWireGuardTu->InstanceNumber;
 
-        if (AnscEqualString(ParamName, "RemoteEndPoint", TRUE))
+        if (AnscEqualString(ParamName, "TunnelName", TRUE))
+        {
+            snprintf(pValue, *pUlSize, "%s", pWireGuardTu->TunnelName);
+            return 0;
+        }
+	
+	if (AnscEqualString(ParamName, "RemoteEndPoint", TRUE))
         {
             snprintf(pValue, *pUlSize, "%s", pWireGuardTu->RemoteEndPoint);
             return 0;
@@ -442,10 +521,16 @@ WireGuardTunnel_GetParamStringValue
             return 0;
         }
   
-        if (AnscEqualString(ParamName, "PreSharedKey", TRUE))
+        if (AnscEqualString(ParamName, "RemoteIPv6", TRUE))
         {
-            snprintf(pValue, *pUlSize, "%s", pWireGuardTu->PreSharedKey);
+            snprintf(pValue, *pUlSize, "%s", pWireGuardTu->RemoteIPv6);
             return 0;
+        }
+        
+	if (AnscEqualString(ParamName, "PreSharedKey", TRUE))
+        {
+	     snprintf(pValue, *pUlSize, "%s", pWireGuardTu->PreSharedKey);
+             return 0;
         }
 
         if (AnscEqualString(ParamName, "PeerPublicKey", TRUE))
@@ -499,7 +584,14 @@ WireGuardTunnel_SetParamStringValue
 
     if (NULL != pWireGuardTu)
     {
-        if (AnscEqualString(ParamName, "RemoteEndPoint", TRUE))
+        if (AnscEqualString(ParamName, "TunnelName", TRUE))
+        {
+            snprintf(pWireGuardTu->TunnelName, sizeof(pWireGuardTu->TunnelName), "%s", strValue);
+            pWireGuardTu->ChangeFlag |= WIREGUARDTU_CF_TUNNELNAME;
+            return TRUE;
+        }
+
+	if (AnscEqualString(ParamName, "RemoteEndPoint", TRUE))
         {
             snprintf(pWireGuardTu->RemoteEndPoint, sizeof(pWireGuardTu->RemoteEndPoint), "%s", strValue);
             pWireGuardTu->ChangeFlag |= WIREGUARDTU_CF_REMEP;
@@ -513,7 +605,14 @@ WireGuardTunnel_SetParamStringValue
             return TRUE;
         }
 
-        if (AnscEqualString(ParamName, "PreSharedKey", TRUE))
+        if (AnscEqualString(ParamName, "RemoteIPv6", TRUE))
+        {
+            snprintf(pWireGuardTu->RemoteIPv6, sizeof(pWireGuardTu->RemoteIPv6), "%s", strValue);
+            pWireGuardTu->ChangeFlag |= WIREGUARDTU_CF_REMOTEIPV6;
+            return TRUE;
+        }
+        
+	if (AnscEqualString(ParamName, "PreSharedKey", TRUE))
         {
             snprintf(pWireGuardTu->PreSharedKey, sizeof(pWireGuardTu->PreSharedKey), "%s", strValue);
             pWireGuardTu->ChangeFlag |= WIREGUARDTU_CF_PRESHAREDKEY;
@@ -583,35 +682,11 @@ WireGuardTunnel_Validate
         return FALSE;
     }
 
-    if (strlen(pWireGuardTu->RemoteEndPoint) == 0)
-    {
-        AnscCopyString(pReturnParamName, "RemoteEndPoint");
-        *puLength = AnscSizeOfString("RemoteEndPoint");
-        CcspTraceError(("%s-RemoteEndPoint is not valid for tunnel instance:%d \n",__FUNCTION__,ins));
-        return FALSE;
-    }
-
     if (strlen(pWireGuardTu->RemoteIP) == 0)
     {
         AnscCopyString(pReturnParamName, "RemoteIP");
         *puLength = AnscSizeOfString("RemoteIP");
         CcspTraceError(("%s-RemoteIP is not valid for tunnel instance:%d \n",__FUNCTION__,ins));
-        return FALSE;
-    }
-
-    if (pWireGuardTu->RemotePort == 0)
-    {
-        AnscCopyString(pReturnParamName, "RemotePort");
-        *puLength = AnscSizeOfString("RemotePort");
-        CcspTraceError(("%s-RemotePort is not valid for tunnel instance:%d \n",__FUNCTION__,ins));
-        return FALSE;
-    }
-
-    if ((pWireGuardTu->PSKEnable) && (strlen(pWireGuardTu->PreSharedKey) == 0))
-    {
-        AnscCopyString(pReturnParamName, "PreSharedKey");
-        *puLength = AnscSizeOfString("PreSharedKey");
-        CcspTraceError(("%s-PreSharedKey is not valid for tunnel instance:%d \n",__FUNCTION__,ins));
         return FALSE;
     }
 
@@ -639,7 +714,14 @@ WireGuardTunnel_Commit
 
     if (pWireGuardTu->ChangeFlag & WIREGUARDTU_CF_ENABLE)
     {
-        if (CosaDml_WireGuardTunnelSetEnable(ins, pWireGuardTu->Enable) != ANSC_STATUS_SUCCESS)
+        if (CosaDml_WireGuardTunnelSetEnable(ins, pWireGuardTu->Enable) == ANSC_STATUS_SUCCESS)
+	{
+	     if(pWireGuardTu->Enable)
+	     {
+		     WireGuard_TunnelGeneratePskKey(ins,pWireGuardTu->PreSharedKey,sizeof(pWireGuardTu->PreSharedKey));	
+	     }
+	}
+	else
             goto rollback;
     }
    
@@ -658,6 +740,18 @@ WireGuardTunnel_Commit
     if (pWireGuardTu->ChangeFlag & WIREGUARDTU_CF_REMOTEIP)
     {
         if (CosaDml_WireGuardTunnelSetRemoteIP(ins, pWireGuardTu->RemoteIP) != ANSC_STATUS_SUCCESS)
+            goto rollback;
+    }
+
+    if (pWireGuardTu->ChangeFlag & WIREGUARDTU_CF_REMOTEIPV6)
+    {
+        if (CosaDml_WireGuardTunnelSetRemoteIPv6(ins, pWireGuardTu->RemoteIPv6) != ANSC_STATUS_SUCCESS)
+            goto rollback;
+    }
+    
+    if (pWireGuardTu->ChangeFlag & WIREGUARDTU_CF_TUNNELNAME)
+    {
+        if (CosaDml_WireGuardTunnelSetTunnelName(ins, pWireGuardTu->TunnelName) != ANSC_STATUS_SUCCESS)
             goto rollback;
     }
 

@@ -54,6 +54,14 @@ WireGuard_SetParamBoolValue
     );
 
 BOOL
+WireGuard_SetParamUlongValue
+    (
+        ANSC_HANDLE           hInsContext,
+        char*                 ParamName,
+        ULONG                 uValue
+    );
+
+BOOL
 WireGuard_SetParamStringValue
     (
         ANSC_HANDLE                 hInsContext,

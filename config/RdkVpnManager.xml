@@ -37,6 +37,7 @@
 	        <func_GetParamUlongValue>WireGuard_GetParamUlongValue</func_GetParamUlongValue>
                 <func_GetParamStringValue>WireGuard_GetParamStringValue</func_GetParamStringValue>
                 <func_SetParamBoolValue>WireGuard_SetParamBoolValue</func_SetParamBoolValue>
+	        <func_SetParamUlongValue>WireGuard_SetParamUlongValue</func_SetParamUlongValue>
                 <func_SetParamStringValue>WireGuard_SetParamStringValue</func_SetParamStringValue>
                 <func_Validate>WireGuard_Validate</func_Validate>
                 <func_Commit>WireGuard_Commit</func_Commit>
@@ -60,6 +61,12 @@
                     <syntax>string</syntax>
                     <writable>true</writable>
                 </parameter>
+		<parameter>
+                    <name>LocalIPv6</name>
+                    <type>string(64)</type>
+                    <syntax>string</syntax>
+                    <writable>true</writable>
+                </parameter>
                 <parameter>
                     <name>Subnet</name>
                     <type>string(15)</type>
@@ -70,7 +77,13 @@
                     <name>PublicKey</name>
                     <type>string(64)</type>
                     <syntax>string</syntax>
-                </parameter>
+	       </parameter>
+	       <parameter>
+                    <name>WireguardPort</name>
+                    <type>unsignedInt</type>
+                    <syntax>uint32</syntax>
+                    <writable>true</writable>
+               </parameter>
 	    </parameters>
     <objects>
         <object>
@@ -103,6 +116,12 @@
                     <syntax>uint32/mapped</syntax>
                 </parameter>
                 <parameter>
+                    <name>TunnelName</name>
+                    <type>string(64)</type>
+                    <syntax>string</syntax>
+                    <writable>true</writable>
+                </parameter>
+                <parameter>
                     <name>PSKEnable</name>
                     <type>boolean</type>
                     <syntax>bool</syntax>
@@ -128,6 +147,12 @@
                 </parameter>
                 <parameter>
                     <name>RemoteIP</name>
+                    <type>string(256)</type>
+                    <syntax>string</syntax>
+                    <writable>true</writable>
+                </parameter>
+                <parameter>
+                    <name>RemoteIPv6</name>
                     <type>string(256)</type>
                     <syntax>string</syntax>
                     <writable>true</writable>

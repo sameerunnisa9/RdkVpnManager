@@ -52,7 +52,13 @@ ANSC_STATUS
 CosaDml_WireGuardTunnelSetRemoteIP(ULONG tuIns, const char *remoteip);
 
 ANSC_STATUS
+CosaDml_WireGuardTunnelSetRemoteIPv6(ULONG tuIns, const char *remoteipv6);
+
+ANSC_STATUS
 CosaDml_WireGuardTunnelSetPreSharedKey(ULONG tuIns, const char *presharedkey);
+
+ANSC_STATUS
+CosaDml_WireGuardTunnelSetTunnelName(ULONG tuIns, const char *tunnelname);
 
 ANSC_STATUS
 CosaDml_WireGuardTunnelSetPeerPublicKey(ULONG tuIns, const char *peerpublickey);
@@ -75,7 +81,13 @@ ANSC_STATUS
 CosaDml_WireGuardTunnelGetRemoteIP(ULONG tuIns, char *ip, ULONG size);
 
 ANSC_STATUS
+CosaDml_WireGuardTunnelGetRemoteIPv6(ULONG tuIns, char *ip6, ULONG size);
+
+ANSC_STATUS
 CosaDml_WireGuardTunnelGetPreSharedKey(ULONG tuIns, char *key, ULONG size);
+
+ANSC_STATUS
+CosaDml_WireGuardTunnelGetTunnelName(ULONG tuIns, char *tunnelname, ULONG size);
 
 ANSC_STATUS
 CosaDml_WireGuardTunnelGetPeerPublicKey(ULONG tuIns, char *key, ULONG size);
@@ -89,4 +101,5 @@ ANSC_STATUS CosaDml_WireGuardTunnelInit(void);
 
 ANSC_STATUS CosaDml_WireGuardTunnelFinalize(void);
 
+ANSC_STATUS WireGuard_TunnelGeneratePskKey(ULONG tuIns, char *pskKey, ULONG size);
 #endif

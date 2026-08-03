@@ -68,8 +68,10 @@ typedef  struct _DML_VPN_IF_CFG
     BOOLEAN                         Enable;
     DML_VPN_IF_CFG_STATUS           Status;
     char                            LocalIP[45];
+    char                            LocalIPv6[64];
     char                            PublicKey[64];
     char                            Subnet[64];
+    ULONG                           WireguardPort;
 }
 DML_VPN_IF_CFG,  *PDML_VPN_IF_CFG;
 
@@ -79,12 +81,14 @@ typedef enum
 _COSA_DML_WIREGUARD_TUNNEL_CHANGE_FLAG
 {
     WIREGUARDTU_CF_ENABLE         = 0x01<<0,
-    WIREGUARDTU_CF_PSKENABLE      = 0x01<<1,
-    WIREGUARDTU_CF_PRESHAREDKEY   = 0x01<<2,
-    WIREGUARDTU_CF_PEERPUBKEY     = 0x01<<3,
-    WIREGUARDTU_CF_REMEP          = 0x01<<4,
-    WIREGUARDTU_CF_REMOTEIP       = 0x01<<5,
-    WIREGUARDTU_CF_REMPORT        = 0x01<6,
+    WIREGUARDTU_CF_TUNNELNAME     = 0x01<<1,
+    WIREGUARDTU_CF_PSKENABLE      = 0x01<<2,
+    WIREGUARDTU_CF_PRESHAREDKEY   = 0x01<<3,
+    WIREGUARDTU_CF_PEERPUBKEY     = 0x01<<4,
+    WIREGUARDTU_CF_REMEP          = 0x01<<5,
+    WIREGUARDTU_CF_REMOTEIP       = 0x01<<6,
+    WIREGUARDTU_CF_REMOTEIPV6     = 0x01<<7,
+    WIREGUARDTU_CF_REMPORT        = 0x01<8,
 }
 COSA_DML_WIREGUARD_TUNNEL_CHANGE_FLAG;
 
@@ -95,11 +99,13 @@ _COSA_DML_WIREGUARD_TUNNEL
     COSA_DML_WIREGUARD_TUNNEL_CHANGE_FLAG ChangeFlag;
     COSA_DML_WIREGUARD_TUNNEL_STATUS      Status;
     BOOL                                  Enable;
+    char                                  TunnelName[64];
     BOOL                                  PSKEnable;
     char                                  PreSharedKey[64];
     char                                  PeerPublicKey[64];
     char                                  RemoteEndPoint[64];
     char                                  RemoteIP[64];
+    char                                  RemoteIPv6[64];
     ULONG                                 RemotePort;
 }
 COSA_DML_WIREGUARD_TUNNEL, *PDML_VPN_TUN_CFG;

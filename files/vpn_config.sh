@@ -36,10 +36,9 @@ COMMAND=$1
 if [ "$COMMAND" = "enable" ]; then
     echo "Enabling wireguard and configuring the wg0.conf file" >> $WG_DEBUG_FILE
     echo "[Interface]" > $WG_CONFIG_FILE 
-    echo "Address = $2/$3" >> $WG_CONFIG_FILE
-    WG_PORT=`syscfg get Wireguard_Port`
-    if [ "" != "$WG_PORT" ] && [ "0" != "$WG_PORT" ]; then
-	echo "ListenPort = $WG_PORT" >> $WG_CONFIG_FILE
+    echo "Address = $2/$3,$4/64" >> $WG_CONFIG_FILE
+    if [ "" != "$5" ] && [ "0" != "$5" ]; then
+	echo "ListenPort = $5" >> $WG_CONFIG_FILE
 	echo "ListenPort value set." >> $WG_DEBUG_FILE
     else
 	echo "Error: ListenPort value not set." >> $WG_DEBUG_FILE
@@ -77,13 +76,18 @@ elif [ "$COMMAND" = "DOWN" ]; then
 elif [ "$COMMAND" = "create_tun" ]; then
     echo "[Peer]" >> $WG_CONFIG_FILE
     echo "PublicKey = $2" >> $WG_CONFIG_FILE
-    echo "AllowedIPs = $5/32" >> $WG_CONFIG_FILE
-    echo "Endpoint = $3:$4" >> $WG_CONFIG_FILE
-    if [ -n "$6" ]; then
-	echo "PresharedKey = $6" >> $WG_CONFIG_FILE
-        echo "PSK $6" >> $WG_DEBUG_FILE
+    echo "AllowedIPs = $5/32,$6/128" >> $WG_CONFIG_FILE
+    if [ -z "$3" ] || [ -z "$4" ]; then
+	    echo "No end point or remote needed as its configure as server" >> $WG_DEBUG_FILE
     else
-        echo "NO PSK $6" >> $WG_DEBUG_FILE
+	    echo "Endpoint = $3:$4" >> $WG_DEBUG_FILE
+    fi
+    if [ -n "$7" ]; then
+	echo "PresharedKey = $7" >> $WG_CONFIG_FILE
+        echo "PSK $7" >> $WG_DEBUG_FILE
+    else
+        echo "NO PSK $7" >> $WG_DEBUG_FILE
+	wg-quick down wg0; wg-quick up wg0
     fi
     echo "" >> $WG_CONFIG_FILE
     echo "Peer configurations added to wg0.conf file" >> $WG_DEBUG_FILE

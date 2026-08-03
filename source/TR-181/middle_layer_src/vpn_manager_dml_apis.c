@@ -17,6 +17,7 @@
  * limitations under the License.
 */
 
+#include <ctype.h>
 #include "plugin_main_apis.h"
 #include "ssp_global.h"
 #include "vpn_manager_dml_apis.h"
@@ -26,9 +27,11 @@
 
 #define WIREGUARD_OBJ_TU                  "wireguard_tunnel_"
 #define WIREGUARDTU_PARAM_ENABLE          WIREGUARD_OBJ_TU "%lu_Enable"
+#define WIREGUARDTU_PARAM_TUNNELNAME      WIREGUARD_OBJ_TU "%lu_TunnelName"
 #define WIREGUARDTU_PARAM_PSKENABLE       WIREGUARD_OBJ_TU "%lu_PSKEnable"
 #define WIREGUARDTU_PARAM_REMEP           WIREGUARD_OBJ_TU "%lu_RemoteEndPoint"
-#define WIREGUARDTU_PARAM_REMOTEIP        WIREGUARD_OBJ_TU "%lu_RemoteIP"
+#define WIREGUARDTU_PARAM_REMOTEIP        WIREGUARD_OBJ_TU "%lu_RemoteIPv4"
+#define WIREGUARDTU_PARAM_REMOTEIPV6      WIREGUARD_OBJ_TU "%lu_RemoteIPv6"
 #define WIREGUARDTU_PARAM_PRESHAREDKEY    WIREGUARD_OBJ_TU "%lu_PreSharedKey"
 #define WIREGUARDTU_PARAM_PEERPUBKEY      WIREGUARD_OBJ_TU "%lu_PeerPublicKey"
 #define WIREGUARDTU_PARAM_REMPORT         WIREGUARD_OBJ_TU "%lu_RemotePort"
@@ -39,6 +42,11 @@
 #define VALUE_MAX_LEN                     8
 #define FILE_BUF_SIZE                     1026
 #define BUF_SIZE                          16
+
+#define MAX_KEY_LEN   128
+#define MAX_EP_LEN    128
+#define MAX_LINE_LEN  256
+#define SERV_PORT     53280
 
 extern PBACKEND_MANAGER_OBJECT           g_pBEManager;
 
@@ -68,15 +76,25 @@ ANSC_STATUS VpnDmlInitialize()
             }
         }
    
-        if (0 == syscfg_get(NULL, "wireguard_localip", string,sizeof(string)))
+        if (0 == syscfg_get(NULL, "wireguard_local_ipv4", string, sizeof(string)))
         {
             strncpy(pMyObject->LocalIP,string,sizeof(pMyObject->LocalIP));
         }
+        
+	if (0 == syscfg_get(NULL, "wireguard_local_ipv6", string, sizeof(string)))
+        {
+            strncpy(pMyObject->LocalIPv6,string,sizeof(pMyObject->LocalIPv6));
+        }
        
-        if (0 == syscfg_get(NULL, "wireguard_subnet", string,sizeof(string)))
+        if (0 == syscfg_get(NULL, "wireguard_subnet", string, sizeof(string)))
         {
             strncpy(pMyObject->Subnet,string,sizeof(pMyObject->Subnet));
         }
+       
+        if (0 == syscfg_get(NULL, "Wireguard_Port", string, sizeof(string)))
+        {
+             pMyObject->WireguardPort = atoi(string);
+        }	
     }
 }
 
@@ -118,10 +136,19 @@ CosaDml_WireGuardGetStatus(DML_VPN_IF_CFG_STATUS *st)
 ANSC_STATUS
 CosaDml_WireGuardTunnelGetStatus(ULONG tuIns, COSA_DML_WIREGUARD_TUNNEL_STATUS *st)
 {
-    char buf[FILE_BUF_SIZE] = {0};
-    FILE *fp = NULL;
     ULONG tuIdx = tuIns-1;
+    ULONG remote_port = 0;
 
+    char endpoint[MAX_EP_LEN] = {0};
+    char remote_endpoint[MAX_EP_LEN] = {0};
+    char port[BUF_SIZE] = {0};
+    char syscfg_endpoint[MAX_SIZE +1] = {0};
+    char syscfg_remport[MAX_SIZE +1] = {0};
+    char line[MAX_LINE_LEN] = {0};
+    int  found_peer = 0;
+    char key[MAX_KEY_LEN] = {0};
+    char cmd[MAX_LINE_LEN] = {0};
+   
     COSA_DATAMODEL_WIREGUARD2 *wireGuard = g_pBEManager->hTWIREGUARD;
 
     if (!st || !wireGuard)
@@ -139,6 +166,8 @@ CosaDml_WireGuardTunnelGetStatus(ULONG tuIns, COSA_DML_WIREGUARD_TUNNEL_STATUS *
     if (!wireGuard->WireGuardTu[tuIdx].Enable)
     {
         *st = DML_VPN_IF_CFG_STATUS_DISABLED;
+        snprintf(wireGuard->WireGuardTu[tuIdx].RemoteEndPoint, sizeof(wireGuard->WireGuardTu[tuIdx].RemoteEndPoint), "0.0.0.0");
+        wireGuard->WireGuardTu[tuIdx].RemotePort = SERV_PORT;
         return ANSC_STATUS_SUCCESS;
     }
 
@@ -148,22 +177,75 @@ CosaDml_WireGuardTunnelGetStatus(ULONG tuIns, COSA_DML_WIREGUARD_TUNNEL_STATUS *
         return ANSC_STATUS_SUCCESS;
     }
 
-    if (fp = popen("wg show", "r"))
-    {
-        while ( fgets(buf, sizeof(buf), fp)!= NULL )
-        {
-            if(strstr(buf,wireGuard->WireGuardTu[tuIdx].PeerPublicKey))
-            {
-                *st = DML_VPN_IF_CFG_STATUS_ENABLED;
-                pclose(fp);
-		CcspTraceInfo(("%s %d - WireGuard Tunnel status is enabled. \n", __FUNCTION__, __LINE__));
-                return ANSC_STATUS_SUCCESS;
-            }
-        }
-        pclose(fp);
+    snprintf(cmd, sizeof(cmd), "wg show wg0");
+
+    FILE *fp = popen(cmd, "r");
+    if (!fp) {
+        perror("popen");
+        return ANSC_STATUS_FAILURE;
     }
 
-    *st = DML_VPN_IF_CFG_STATUS_ERROR;
+    while (fgets(line, sizeof(line), fp) != NULL) 
+    {
+        while (isspace((unsigned char)*line)) memmove(line, line + 1, strlen(line));
+
+        if (strncmp(line, "peer:", 5) == 0) {
+            sscanf(line, "peer: %127s", key);
+
+            if (strcmp(key, wireGuard->WireGuardTu[tuIdx].PeerPublicKey) == 0) 
+	    {
+                found_peer = 1; 
+                *st = DML_VPN_IF_CFG_STATUS_ENABLED;
+            } 
+	    else 
+	    {
+                found_peer = 0;
+            }
+        }
+
+        if (found_peer && strncmp(line, "endpoint:", 9) == 0) {
+            sscanf(line, "endpoint: %127s", endpoint);
+            break ;
+	}
+    }
+
+    pclose(fp);
+
+    if (endpoint[0] == '\0') {
+        CcspTraceInfo(("Peer with public key not found or no endpoint set.\n"));
+	return ANSC_STATUS_SUCCESS;
+    }
+
+    if (endpoint[0] == '[')
+    {
+        if (sscanf(endpoint, "[%127[^]]]:%15s", remote_endpoint, port) == 2)
+        {
+            snprintf(wireGuard->WireGuardTu[tuIdx].RemoteEndPoint, sizeof(wireGuard->WireGuardTu[tuIdx].RemoteEndPoint), "%s", remote_endpoint);
+            remote_port = atoi(port);
+            wireGuard->WireGuardTu[tuIdx].RemotePort = remote_port;
+        }
+        else
+        {
+            CcspTraceWarning(("Invalid IPv6 endpoint format\n"));
+        }
+    }
+    else if (sscanf(endpoint, "%127[^:]:%15s", remote_endpoint, port) == 2)
+    {
+        snprintf(wireGuard->WireGuardTu[tuIdx].RemoteEndPoint, sizeof(wireGuard->WireGuardTu[tuIdx].RemoteEndPoint), "%s", remote_endpoint);
+        remote_port = atoi(port);
+        wireGuard->WireGuardTu[tuIdx].RemotePort = remote_port;
+    }
+    else
+    {
+        CcspTraceWarning(("Invalid IPv4 endpoint format\n"));
+    }
+
+    snprintf(syscfg_endpoint, sizeof(syscfg_endpoint), WIREGUARDTU_PARAM_REMEP, tuIns);
+    syscfg_set(NULL,syscfg_endpoint,remote_endpoint);
+    snprintf(syscfg_remport, sizeof(syscfg_remport), WIREGUARDTU_PARAM_REMPORT, tuIns);
+    syscfg_set(NULL, syscfg_remport, port);
+    syscfg_commit();
+
     return ANSC_STATUS_SUCCESS;
 }
 
@@ -204,7 +286,7 @@ void create_config_file()
     else
     {
         CcspTraceInfo(("%s %d - Enabling the WireGuard through the script. \n", __FUNCTION__, __LINE__));
-	v_secure_system(VPN_CONFIG_SCRIPT " enable %s %d", pMyObject->LocalIP, netMastToCIDR(pMyObject->Subnet));
+	v_secure_system(VPN_CONFIG_SCRIPT " enable %s %d %s %ld", pMyObject->LocalIP, netMastToCIDR(pMyObject->Subnet), pMyObject->LocalIPv6, pMyObject->WireguardPort);
 	for (i = 0; i < 5; i++)
         {
             PDML_VPN_TUN_CFG pTunnel = &(wireGuard->WireGuardTu[i]);
@@ -213,9 +295,9 @@ void create_config_file()
                 continue;
 
 	    CcspTraceInfo(("%s %d - Creating Tunnel through the script. \n", __FUNCTION__, __LINE__));
-	    v_secure_system(VPN_CONFIG_SCRIPT " create_tun %s %s %ld %s %s",
+	    v_secure_system(VPN_CONFIG_SCRIPT " create_tun %s %s %ld %s %s %s",
                         pTunnel->PeerPublicKey, pTunnel->RemoteEndPoint,
-                        pTunnel->RemotePort,pTunnel->RemoteIP, 
+			pTunnel->RemotePort,pTunnel->RemoteIP,pTunnel->RemoteIPv6,
 			pTunnel->PSKEnable ? pTunnel->PreSharedKey:"\0");
         }
     }
@@ -263,8 +345,8 @@ CosaDml_WireGuardTunnelSetEnable(ULONG tuIns, BOOL enable)
     snprintf(syscfg_var, sizeof(syscfg_var),WIREGUARDTU_PARAM_ENABLE, tuIns);
 
     syscfg_set(NULL,syscfg_var,value);
-    syscfg_commit();   
-     
+    syscfg_commit();
+
     return ANSC_STATUS_SUCCESS;
 }
 
@@ -292,7 +374,6 @@ CosaDml_WireGuardTunnelSetRemoteEndPoint(ULONG tuIns, const char *endpoint)
         return ANSC_STATUS_FAILURE;
 
     snprintf(syscfg_var, sizeof(syscfg_var),WIREGUARDTU_PARAM_REMEP, tuIns);
-
     syscfg_set(NULL,syscfg_var,endpoint);
     syscfg_commit();
 
@@ -310,6 +391,22 @@ CosaDml_WireGuardTunnelSetRemoteIP(ULONG tuIns, const char *remoteip)
     snprintf(syscfg_var, sizeof(syscfg_var),WIREGUARDTU_PARAM_REMOTEIP, tuIns);
 
     syscfg_set(NULL,syscfg_var,remoteip);
+    syscfg_commit();
+
+    return ANSC_STATUS_SUCCESS;
+}
+
+ANSC_STATUS
+CosaDml_WireGuardTunnelSetRemoteIPv6(ULONG tuIns, const char *remoteipv6)
+{
+    char syscfg_var[MAX_SIZE +1]={0};
+
+    if (!remoteipv6)
+        return ANSC_STATUS_FAILURE;
+
+    snprintf(syscfg_var, sizeof(syscfg_var),WIREGUARDTU_PARAM_REMOTEIPV6, tuIns);
+
+    syscfg_set(NULL,syscfg_var,remoteipv6);
     syscfg_commit();
 
     return ANSC_STATUS_SUCCESS;
@@ -362,6 +459,22 @@ CosaDml_WireGuardTunnelSetRemotePort(ULONG tuIns, ULONG val)
     return ANSC_STATUS_SUCCESS;
 }
 
+ANSC_STATUS
+CosaDml_WireGuardTunnelSetTunnelName(ULONG tuIns, const char *tunnelname)
+{
+    char syscfg_var[MAX_SIZE +1]={0};
+
+    if (!tunnelname)
+        return ANSC_STATUS_FAILURE;
+
+    snprintf(syscfg_var, sizeof(syscfg_var),WIREGUARDTU_PARAM_TUNNELNAME, tuIns);
+
+    syscfg_set(NULL,syscfg_var,tunnelname);
+    syscfg_commit();
+
+    return ANSC_STATUS_SUCCESS;
+}
+
 ANSC_STATUS WireGuardTunnelDmlInitialize()
 {
   
@@ -382,9 +495,11 @@ ANSC_STATUS WireGuardTunnelDmlInitialize()
     {
         tuIns=i+1;
         CosaDml_WireGuardTunnelGetEnable(tuIns, &(pMyObject->WireGuardTu[i].Enable));
+        CosaDml_WireGuardTunnelGetTunnelName(tuIns, pMyObject->WireGuardTu[i].TunnelName, sizeof(pMyObject->WireGuardTu[i].TunnelName));
         CosaDml_WireGuardTunnelGetPSKEnable(tuIns, &(pMyObject->WireGuardTu[i].PSKEnable));
         CosaDml_WireGuardTunnelGetRemoteEndPoint(tuIns, pMyObject->WireGuardTu[i].RemoteEndPoint, sizeof(pMyObject->WireGuardTu[i].RemoteEndPoint));
         CosaDml_WireGuardTunnelGetRemoteIP(tuIns, pMyObject->WireGuardTu[i].RemoteIP, sizeof(pMyObject->WireGuardTu[i].RemoteIP));
+        CosaDml_WireGuardTunnelGetRemoteIPv6(tuIns, pMyObject->WireGuardTu[i].RemoteIPv6, sizeof(pMyObject->WireGuardTu[i].RemoteIPv6));
         CosaDml_WireGuardTunnelGetPreSharedKey(tuIns, pMyObject->WireGuardTu[i].PreSharedKey, sizeof(pMyObject->WireGuardTu[i].PreSharedKey));
         CosaDml_WireGuardTunnelGetPeerPublicKey(tuIns, pMyObject->WireGuardTu[i].PeerPublicKey, sizeof(pMyObject->WireGuardTu[i].PeerPublicKey));
         CosaDml_WireGuardTunnelGetRemotePort(tuIns, &(pMyObject->WireGuardTu[i].RemotePort));
@@ -407,7 +522,25 @@ CosaDml_WireGuardTunnelGetEnable(ULONG tuIns, BOOL *enable)
     
     if (0 == syscfg_get(NULL,syscfg_var, value, sizeof(value)))
         *enable = (atoi(value) == 1) ? TRUE : FALSE;
-      
+     
+    return ANSC_STATUS_SUCCESS;
+}
+
+ANSC_STATUS
+CosaDml_WireGuardTunnelGetTunnelName(ULONG tuIns, char *tunnelname, ULONG size)
+{
+    if (!tunnelname)
+        return ANSC_STATUS_FAILURE;
+
+    char syscfg_var[MAX_SIZE +1],string[STRING_MAX_LEN] = {0};
+    snprintf(syscfg_var, sizeof(syscfg_var),WIREGUARDTU_PARAM_TUNNELNAME, tuIns);
+
+    if (0 == syscfg_get(NULL,syscfg_var, string, sizeof(string)))
+        strncpy(tunnelname,string,sizeof(string));
+
+    if ((unsigned int)size > strlen(string))
+        snprintf(tunnelname, size, "%s", string);
+
     return ANSC_STATUS_SUCCESS;
 }
 
@@ -467,6 +600,24 @@ CosaDml_WireGuardTunnelGetRemoteIP(ULONG tuIns, char *ip, ULONG size)
 }
 
 ANSC_STATUS
+CosaDml_WireGuardTunnelGetRemoteIPv6(ULONG tuIns, char *ip6, ULONG size)
+{
+    if (!ip6)
+        return ANSC_STATUS_FAILURE;
+
+    char syscfg_var[MAX_SIZE +1],string[STRING_MAX_LEN] = {0};
+    snprintf(syscfg_var, sizeof(syscfg_var),WIREGUARDTU_PARAM_REMOTEIPV6, tuIns);
+
+    if (0 == syscfg_get(NULL,syscfg_var, string, sizeof(string)))
+        strncpy(ip6,string,sizeof(string));
+
+    if ((unsigned int)size > strlen(string))
+        snprintf(ip6, size, "%s", string);
+
+    return ANSC_STATUS_SUCCESS;
+}
+
+ANSC_STATUS
 CosaDml_WireGuardTunnelGetPreSharedKey(ULONG tuIns, char *key, ULONG size)
 {
     if (!key)
@@ -477,7 +628,6 @@ CosaDml_WireGuardTunnelGetPreSharedKey(ULONG tuIns, char *key, ULONG size)
     
     if (0 == syscfg_get(NULL,syscfg_var, string, sizeof(string)))
         strncpy(key,string,sizeof(string));
-
     if ((unsigned int)size > strlen(string))
         snprintf(key, size, "%s", string);
 
@@ -517,5 +667,45 @@ CosaDml_WireGuardTunnelGetRemotePort(ULONG tuIns, ULONG *val)
     if (0 == syscfg_get(NULL,syscfg_var, buf, sizeof(buf)))
         *val = atoi(buf);
       
+    return ANSC_STATUS_SUCCESS;
+}
+
+ANSC_STATUS
+WireGuard_TunnelGeneratePskKey(ULONG tuIns, char *pskKey, ULONG size)
+{ 
+    FILE *fd = NULL;
+    char presharedKey [STRING_MAX_LEN] = {0};
+    char syscfg_var[MAX_SIZE +1]={0};
+
+    if(!pskKey)
+	    return ANSC_STATUS_FAILURE;
+
+    snprintf(syscfg_var, sizeof(syscfg_var),WIREGUARDTU_PARAM_PRESHAREDKEY, tuIns);
+   
+    syscfg_get(NULL,syscfg_var, presharedKey, sizeof(presharedKey));
+
+    if(strlen(presharedKey) == 0)
+    {
+	    snprintf(presharedKey,sizeof(presharedKey),"wg genpsk"); 
+	    fd = popen(presharedKey, "r");
+	    if (fd)
+	    {
+		    fgets(presharedKey,sizeof(presharedKey),fd);
+		    pclose(fd);
+	    }
+	    size_t len = strlen(presharedKey);
+	    if(len > 0 && presharedKey [len -1] == '\n')
+	    {
+                presharedKey[len -1] = '\0';
+	    }
+	    syscfg_set(NULL,syscfg_var,presharedKey);
+	    syscfg_commit();
+    }
+
+    strncpy(pskKey,presharedKey,sizeof(presharedKey));
+
+    if ((unsigned int)size > strlen(presharedKey))
+        snprintf(pskKey, size, "%s", presharedKey);
+
     return ANSC_STATUS_SUCCESS;
 }

@@ -99,6 +99,7 @@ int ANSC_EXPORT_API VpnDmlInit
     pPlugInfo->RegisterFunction(pPlugInfo->hContext, "WireGuard_GetParamUlongValue", WireGuard_GetParamUlongValue);
     pPlugInfo->RegisterFunction(pPlugInfo->hContext, "WireGuard_GetParamStringValue", WireGuard_GetParamStringValue);
     pPlugInfo->RegisterFunction(pPlugInfo->hContext, "WireGuard_SetParamBoolValue", WireGuard_SetParamBoolValue);
+    pPlugInfo->RegisterFunction(pPlugInfo->hContext, "WireGuard_SetParamUlongValue", WireGuard_SetParamUlongValue);
     pPlugInfo->RegisterFunction(pPlugInfo->hContext, "WireGuard_SetParamStringValue",WireGuard_SetParamStringValue);
     pPlugInfo->RegisterFunction(pPlugInfo->hContext, "WireGuard_Validate",WireGuard_Validate);
     pPlugInfo->RegisterFunction(pPlugInfo->hContext, "WireGuard_Commit",WireGuard_Commit);
