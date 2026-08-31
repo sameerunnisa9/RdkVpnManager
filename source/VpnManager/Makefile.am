@@ -37,6 +37,6 @@ vpnmanager_DEPENDENCIES= \
 
 vpnmanager_CFLAGS = $(SYSTEMD_CFLAGS) $(NONROOT_CFLAGS)
 vpnmanager_SOURCES = Makefile.am ssp_action.c ssp_internal.h ssp_main.c ssp_messagebus_interface.c
-vpnmanager_LDFLAGS = -lccsp_common -ldl $(SYSTEMD_LDFLAGS) -lrdkloggers -lsyscfg -ldbus-1
+vpnmanager_LDFLAGS = -lccsp_common -ldl $(SYSTEMD_LDFLAGS) -lrdkloggers -lsyscfg -ldbus-1 -lbreakpadwrapper -lpthread -lstdc++ -lsecure_wrapper
 vpnmanager_LDADD =  $(vpnmanager_DEPENDENCIES)
 

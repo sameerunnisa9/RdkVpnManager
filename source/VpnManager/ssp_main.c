@@ -30,14 +30,82 @@
 char                                        g_Subsystem[32]         = {0};
 extern char*                                pComponentName;
 extern ANSC_HANDLE                          bus_handle;
-extern volatile unsigned int VPNMANAGER_RDKLogLevel;
-extern volatile BOOL VPNMANAGER_RDKLogEnable;
+
+volatile unsigned int                       VPNMANAGER_RDKLogLevel  = (unsigned int)CCSP_TRACE_LEVEL_INFO;
+volatile BOOL                               VPNMANAGER_RDKLogEnable = TRUE;
+
+/*
+ * Reads a LogAgent parameter over the CCSP message bus.
+ * Returns the parameter value, or -1 when it could not be retrieved.
+ */
+int GetLogInfo(ANSC_HANDLE bus_handle, char *Subsystem, char *pParameterName)
+{
+    char                        dst_pathname_cr[64] = {0};
+    componentStruct_t**         ppComponents        = NULL;
+    parameterValStruct_t**      ppParameterVal      = NULL;
+    char*                       pParamNames[1];
+    int                         compSize            = 0;
+    int                         valSize             = 0;
+    int                         value               = -1;
+    int                         ret                 = 0;
+
+    if ((Subsystem == NULL) || (pParameterName == NULL))
+    {
+        return -1;
+    }
+
+    snprintf(dst_pathname_cr, sizeof(dst_pathname_cr), "%s%s", Subsystem, CCSP_DBUS_INTERFACE_CR);
+
+    ret = CcspBaseIf_discComponentSupportingNamespace(bus_handle,
+                                                      dst_pathname_cr,
+                                                      pParameterName,
+                                                      Subsystem,
+                                                      &ppComponents,
+                                                      &compSize);
+    if ((ret != CCSP_SUCCESS) || (compSize < 1))
+    {
+        return -1;
+    }
+
+    pParamNames[0] = pParameterName;
+
+    ret = CcspBaseIf_getParameterValues(bus_handle,
+                                        ppComponents[0]->componentName,
+                                        ppComponents[0]->dbusPath,
+                                        pParamNames,
+                                        1,
+                                        &valSize,
+                                        &ppParameterVal);
+
+    if ((ret == CCSP_SUCCESS) && (valSize >= 1) && (ppParameterVal[0]->parameterValue != NULL))
+    {
+        if (strcmp(ppParameterVal[0]->parameterValue, "true") == 0)
+        {
+            value = 1;
+        }
+        else if (strcmp(ppParameterVal[0]->parameterValue, "false") == 0)
+        {
+            value = 0;
+        }
+        else
+        {
+            value = atoi(ppParameterVal[0]->parameterValue);
+        }
+    }
+
+    if (ppParameterVal != NULL)
+    {
+        free_parameterValStruct_t(bus_handle, valSize, ppParameterVal);
+    }
+
+    free_componentStruct_t(bus_handle, compSize, ppComponents);
+
+    return value;
+}
 
 #if defined(_ANSC_LINUX)
 static void daemonize(void) 
 {
-    int fd;
-
     switch (fork())
     {
         case 0:
@@ -60,6 +128,8 @@ static void daemonize(void)
     }
 
 #ifndef  _DEBUG
+    int fd;
+
     fd = open("/dev/null", O_RDONLY);
     if (fd != 0) {
         dup2(fd, 0);
@@ -197,12 +267,22 @@ void sig_handler(int sig)
     }
     else if ( sig == SIGALRM ) 
     {
+        int logInfo;
+
         signal(SIGALRM, sig_handler); /* reset it to this function */
         CcspTraceInfo(("SIGALRM received!\n"));
-        RDKLogEnable = GetLogInfo(bus_handle,"eRT.","Device.LogAgent.X_RDKCENTRAL-COM_LoggerEnable");
-        RDKLogLevel = (char)GetLogInfo(bus_handle,"eRT.","Device.LogAgent.X_RDKCENTRAL-COM_LogLevel");
-        VPNMANAGER_RDKLogLevel = GetLogInfo(bus_handle,"eRT.","Device.LogAgent.X_RDKCENTRAL-COM_VpnManager_LogLevel");
-        VPNMANAGER_RDKLogEnable = (char)GetLogInfo(bus_handle,"eRT.","Device.LogAgent.X_RDKCENTRAL-COM_VpnManager_LoggerEnable");
+
+        logInfo = GetLogInfo(bus_handle, "eRT.", "Device.LogAgent.X_RDKCENTRAL-COM_VpnManager_LoggerEnable");
+        if (logInfo >= 0)
+        {
+            VPNMANAGER_RDKLogEnable = (logInfo != 0) ? TRUE : FALSE;
+        }
+
+        logInfo = GetLogInfo(bus_handle, "eRT.", "Device.LogAgent.X_RDKCENTRAL-COM_VpnManager_LogLevel");
+        if (logInfo >= 0)
+        {
+            VPNMANAGER_RDKLogLevel = (unsigned int)logInfo;
+        }
     }
     else 
     {
@@ -274,6 +354,7 @@ int main(int argc, char* argv[])
     signal(SIGILL, sig_handler);
     signal(SIGQUIT, sig_handler);
     signal(SIGHUP, sig_handler);
+    signal(SIGALRM, sig_handler);
 #endif
 
     cmd_dispatch('e');

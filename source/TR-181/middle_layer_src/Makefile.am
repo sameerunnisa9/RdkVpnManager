@@ -28,6 +28,6 @@ noinst_LTLIBRARIES = libvpnmanager_middle_layer_src.la
 libvpnmanager_middle_layer_src_la_CPPFLAGS = -I$(top_srcdir)/source/TR-181/include -I$(top_srcdir)/source/TR-181/middle_layer_src -I$(top_srcdir)/source/VpnManager
 
 libvpnmanager_middle_layer_src_la_SOURCES = vpn_manager_dml.c  plugin_main_apis.c  plugin_main_apis.h  plugin_main.c vpn_manager_dml_apis.c vpn_manager_internal.c vpn_manager_internal.h
-libvpnmanager_middle_layer_src_la_LDFLAGS = -lccsp_common -lrdkloggers $(SYSTEMD_LDFLAGS) -lpthread -lsysevent 
+libvpnmanager_middle_layer_src_la_LDFLAGS = -lccsp_common -lrdkloggers $(SYSTEMD_LDFLAGS) -lpthread -lsysevent -lsecure_wrapper 
 
 
